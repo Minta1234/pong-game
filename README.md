@@ -1,5 +1,6 @@
 # pong-game
-pinpong game
+
+# equipment
 ```
 #use ARdoino uno r3
 #use oled 1.3 inc
