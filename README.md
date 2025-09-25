@@ -2,7 +2,7 @@
 
 # equipment
 ```
-#use ARdoino uno r3
+#use ARdoino uno r3 or esp32 dev module
 #use oled 1.3 inc
 #use joystick x2
 ##physic
