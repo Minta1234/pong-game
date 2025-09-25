@@ -10,6 +10,7 @@ pinpong game
 ##physic
 
 #pin
+
 OLED SH1106 (I2C)
 
 VCC → 5V
