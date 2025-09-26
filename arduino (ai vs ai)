@@ -4,16 +4,11 @@
 // OLED SH1106
 U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
-// Joystick
+// Joystick P1
 #define JOY1_Y  A0
-#define JOY1_SW 6   // ปุ่มกด SW ของ Joystick P1
-
-// Brightness buttons
-#define BTN_UP   4
-#define BTN_DOWN 5
+#define JOY1_SW 6   // SW button joystick P1
 
 // Game variables
-int brightness = 128;
 int p1Y = 30, p2Y = 30;
 int ballX = 64, ballY = 32;
 int ballDX = 1, ballDY = 1;
@@ -22,24 +17,15 @@ int p1Score = 0, p2Score = 0;
 int gameMode = 0;   // 0=PvAI, 1=AIvsAI
 bool selectConfirmed = false;
 
-// debounce
-unsigned long lastPressUp=0,lastPressDown=0,lastSw=0;
-const unsigned long holdInterval=500;
+unsigned long lastSw=0;
 
 void setup() {
   u8g2.begin();
-  u8g2.setContrast(brightness);
-
-  pinMode(BTN_UP, INPUT_PULLUP);
-  pinMode(BTN_DOWN, INPUT_PULLUP);
   pinMode(JOY1_SW, INPUT_PULLUP);
-
   drawMenu();
 }
 
 void loop() {
-  checkBrightness();
-
   if (!selectConfirmed) {
     selectMode();
   } else {
@@ -52,7 +38,6 @@ void loop() {
 void selectMode() {
   int y1 = analogRead(JOY1_Y);
 
-  // ใช้ค่า Y เลือกโหมด
   if (y1 < 400) { 
     gameMode = 0;   // Player vs AI
     drawMenu(); 
@@ -64,7 +49,6 @@ void selectMode() {
     delay(200); 
   }
 
-  // กด SW เพื่อยืนยัน
   if (digitalRead(JOY1_SW) == LOW) {
     if (millis() - lastSw > 500) {
       selectConfirmed = true;
@@ -85,26 +69,6 @@ void drawMenu() {
   u8g2.drawStr(20, 35, gameMode == 0 ? "> Player vs AI" : "  Player vs AI");
   u8g2.drawStr(20, 50, gameMode == 1 ? "> AI vs AI" : "  AI vs AI");
   u8g2.sendBuffer();
-}
-
-// -------- Brightness --------
-void checkBrightness() {
-  unsigned long now=millis();
-  if(digitalRead(BTN_UP)==LOW){
-    if(lastPressUp==0||(now-lastPressUp>=holdInterval)){ changeBrightness(1); lastPressUp=now; }
-  } else lastPressUp=0;
-
-  if(digitalRead(BTN_DOWN)==LOW){
-    if(lastPressDown==0||(now-lastPressDown>=holdInterval)){ changeBrightness(-1); lastPressDown=now; }
-  } else lastPressDown=0;
-}
-void changeBrightness(int step){
-  int percent=map(brightness,0,255,0,100);
-  percent+=step;
-  if(percent<0)percent=0;
-  if(percent>100)percent=100;
-  brightness=map(percent,0,100,0,255);
-  u8g2.setContrast(brightness);
 }
 
 // -------- Pong Core --------
