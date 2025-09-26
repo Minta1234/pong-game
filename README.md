@@ -38,13 +38,11 @@ SDA → GPIO 21
 
 Joystick P1 
 VRy → GPIO 34
-SW → GPIO 25
 VCC → 3.3V
 GND → GND
 
 Joystick P2 
 VRy → GPIO 35
-SW → GPIO 26
 VCC → 3.3V
 GND → GND
 ```
