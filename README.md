@@ -49,4 +49,9 @@ Joystick P2
 VRy → GPIO 35
 VCC → 3.3V
 GND → GND
+
+button1 GPIO 13  // Select PvP
+button2 GPIO 12   // Select PvAI
+button3 GPIO 14   // Select AIvsAI
+
 ```
