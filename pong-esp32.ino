@@ -4,7 +4,7 @@
 #include <Wire.h>
 
 // ===== OLED SH1106 =====
-U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
+U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
 // ===== Joystick =====
 #define JOY1_Y 34   // Player 1
@@ -19,14 +19,16 @@ int p1Score=0, p2Score=0;
 int gameMode=-1;     // -1=Not Selected, 0=PvP, 1=PvAI, 2=AIvsAI
 bool gameOver=false;
 String winner="";
+String lastWinner="";
 const int maxScore=5;
+unsigned long gameOverTime=0;
 
 // ===== WiFi AP/Web =====
 WebServer server(80);
 const char *SSID="ESP32-PONG";
 const char *PASS="12345678";
 
-// ===== HTML (PROGMEM) =====
+// ===== HTML (หน้าเว็บ) =====
 static const char INDEX_HTML[] PROGMEM = R"HTML(
 <!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>ESP32 Pong</title>
@@ -61,21 +63,35 @@ async function poll(){
     win.textContent = d.over ? (d.winner+" WINS!") : "";
   }catch(e){}
 }
-setInterval(poll,600); poll();
+setInterval(poll,400); poll();
 </script>
 </body></html>
 )HTML";
 
 // ===== Game Logic =====
-void resetBall(){ ballX=64; ballY=32; ballDX=(random(0,2)?1:-1); ballDY=random(-1,2); }
+void resetBall(){ 
+  ballX=64; ballY=32; 
+  ballDX=(random(0,2)?1:-1); 
+  ballDY=random(-1,2); 
+}
 inline void clampPaddles(){
   if(p1Y<0) p1Y=0; if(p2Y<0) p2Y=0;
   if(p1Y>64-paddleH) p1Y=64-paddleH;
   if(p2Y>64-paddleH) p2Y=64-paddleH;
 }
 void checkWin(){
-  if(p1Score>=maxScore){ gameOver=true; winner=(gameMode==0?"P1":gameMode==1?"YOU":"AI1"); }
-  if(p2Score>=maxScore){ gameOver=true; winner=(gameMode==0?"P2":gameMode==1?"AI":"AI2"); }
+  if(p1Score>=maxScore){ 
+    gameOver=true; 
+    winner=(gameMode==0?"P1":gameMode==1?"YOU":"AI1"); 
+    lastWinner=winner; 
+    gameOverTime=millis();
+  }
+  if(p2Score>=maxScore){ 
+    gameOver=true; 
+    winner=(gameMode==0?"P2":gameMode==1?"AI":"AI2"); 
+    lastWinner=winner; 
+    gameOverTime=millis();
+  }
 }
 void updateBall(){
   if(gameOver || gameMode==-1) return;
@@ -90,48 +106,63 @@ void readJoystickP1(){ int y=analogRead(JOY1_Y); if(y<1500)p1Y-=2; else if(y>300
 void readJoystickP2(){ int y=analogRead(JOY2_Y); if(y<1500)p2Y-=2; else if(y>3000)p2Y+=2; }
 
 void playPvP(){ readJoystickP1(); readJoystickP2(); clampPaddles(); updateBall(); }
-void playPvAI(){ readJoystickP1(); if(ballY<p2Y+paddleH/2)p2Y-=2; else if(ballY>p2Y+paddleH/2)p2Y+=2; clampPaddles(); updateBall(); }
+void playPvAI(){ 
+  readJoystickP1(); 
+  static unsigned long lastMove=0;
+  if(millis()-lastMove>60){ // AI reaction ~60ms
+    if(ballY<p2Y+paddleH/2)p2Y-=2; 
+    else if(ballY>p2Y+paddleH/2)p2Y+=2; 
+    lastMove=millis();
+  }
+  clampPaddles(); updateBall(); 
+}
 void playAIvsAI(){
-  // AI1 ~70% โอกาสตี
-  if(random(0,100) > 30){
-    if(ballY<p1Y+paddleH/2)p1Y-=2;
-    else if(ballY>p1Y+paddleH/2)p1Y+=2;
+  static unsigned long lastMove1=0,lastMove2=0;
+  if(millis()-lastMove1>80){ // AI1 reaction
+    if(random(0,100)>20){ // 80% แม่น
+      if(ballY<p1Y+paddleH/2)p1Y-=2;
+      else if(ballY>p1Y+paddleH/2)p1Y+=2;
+    }
+    lastMove1=millis();
   }
-  // AI2 ~50% โอกาสตี
-  if(random(0,100) > 50){
-    if(ballY<p2Y+paddleH/2)p2Y-=2;
-    else if(ballY>p2Y+paddleH/2)p2Y+=2;
+  if(millis()-lastMove2>100){ // AI2 reaction
+    if(random(0,100)>50){ // 50% แม่น
+      if(ballY<p2Y+paddleH/2)p2Y-=2;
+      else if(ballY>p2Y+paddleH/2)p2Y+=2;
+    }
+    lastMove2=millis();
   }
-  clampPaddles();
-  updateBall();
+  clampPaddles(); updateBall();
 }
 
 void drawFrame(const char* l,const char* r){
-  u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_6x12_tr);
-  if(gameMode==-1){
-    u8g2.drawStr(20,30,"PING PONG GAME");
-  }else{
-    char buf1[12], buf2[12];
-    snprintf(buf1,sizeof(buf1),"%s:%d", l,p1Score);
-    snprintf(buf2,sizeof(buf2),"%s:%d", r,p2Score);
-    u8g2.drawBox(0,p1Y,paddleW,paddleH);
-    u8g2.drawBox(127-paddleW,p2Y,paddleW,paddleH);
-    u8g2.drawBox(ballX,ballY,2,2);
-    u8g2.drawStr(4,10,buf1);
-    u8g2.drawStr(92,10,buf2);
-    if(gameOver){
-      u8g2.drawStr(36,30,winner.c_str());
-      u8g2.drawStr(36,45,"WINS!");
+  u8g2.firstPage();
+  do {
+    u8g2.setFont(u8g2_font_6x12_tr);
+    if(gameMode==-1){
+      u8g2.drawStr(20,30,"PING PONG GAME");
+      if(lastWinner!="") u8g2.drawStr(15,50,("Last: "+lastWinner).c_str());
+    }else{
+      char buf1[12], buf2[12];
+      snprintf(buf1,sizeof(buf1),"%s:%d", l,p1Score);
+      snprintf(buf2,sizeof(buf2),"%s:%d", r,p2Score);
+      u8g2.drawBox(0,p1Y,paddleW,paddleH);
+      u8g2.drawBox(127-paddleW,p2Y,paddleW,paddleH);
+      u8g2.drawBox(ballX,ballY,2,2);
+      u8g2.drawStr(4,10,buf1);
+      u8g2.drawStr(92,10,buf2);
+      if(gameOver){
+        u8g2.drawStr(36,30,winner.c_str());
+        u8g2.drawStr(36,45,"WINS!");
+      }
     }
-  }
-  u8g2.sendBuffer();
+  } while(u8g2.nextPage());
 }
 
 // ===== Web Handlers =====
 void handleRoot(){ server.send_P(200,"text/html",INDEX_HTML); }
 void handleScore(){
-  char buf[128];
+  char buf[160];
   snprintf(buf,sizeof(buf),
     "{\"P1\":%d,\"P2\":%d,\"mode\":%d,\"over\":%s,\"winner\":\"%s\"}",
     p1Score,p2Score,gameMode, gameOver?"true":"false", winner.c_str());
@@ -164,14 +195,23 @@ void setup(){
 }
 void loop(){
   server.handleClient();
+
+  // Auto reset หลังจบเกม 3 วิ
+  if(gameOver && (millis()-gameOverTime>3000)){
+    p1Score=0;p2Score=0;gameOver=false;winner="";
+    resetBall();
+  }
+
   if(!gameOver && gameMode!=-1){
     if(gameMode==0) playPvP();
     else if(gameMode==1) playPvAI();
     else playAIvsAI();
   }
+
   if(gameMode==0) drawFrame("P1","P2");
   else if(gameMode==1) drawFrame("YOU","AI");
   else if(gameMode==2) drawFrame("AI1","AI2");
   else drawFrame("","");
-  delay(16);
+
+  delay(16); // ~60 FPS
 }
