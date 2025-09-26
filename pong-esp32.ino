@@ -16,7 +16,7 @@ U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 // ===== Game State =====
 int p1Y=30, p2Y=30;
 int ballX=64, ballY=32;
-int ballDX=1, ballDY=1;   
+int ballDX=1, ballDY=1;
 const int paddleH=16, paddleW=2;
 int p1Score=0, p2Score=0;
 int gameMode=-1;      
@@ -26,9 +26,9 @@ char lastWinner[8]="";
 const int maxScore=5;
 unsigned long gameOverTime=0;
 
-// ===== AI Accuracy ( 1–100%) =====
-int ai1Accuracy=50;
-int ai2Accuracy=50;
+// ===== AI Accuracy (สุ่ม 1–100%) =====
+int ai1Accuracy=0;
+int ai2Accuracy=0;
 
 // ===== WiFi AP/Web =====
 WebServer server(80);
@@ -70,7 +70,9 @@ async function poll(){
     sc.textContent = d.P1+" - "+d.P2;
     md.textContent = "Mode: " + (d.mode==-1?"Not Selected":(d.mode==0?"PvP":(d.mode==1?"PvAI":"AIvsAI")));
     win.textContent = d.over ? (d.winner+" WINS!") : "";
-    aiinfo.textContent = (d.mode==2) ? ("AI1="+d.AI1+"%  |  AI2="+d.AI2+"%") : "";
+    if(d.mode==1) aiinfo.textContent = "AI="+d.AI2+"%";
+    else if(d.mode==2) aiinfo.textContent = "AI1="+d.AI1+"%  |  AI2="+d.AI2+"%";
+    else aiinfo.textContent="";
   }catch(e){}
 }
 setInterval(poll,500); poll();
@@ -121,7 +123,7 @@ void updateBall(){
   ballX+=ballDX; 
   ballY+=ballDY;
 
-  
+  // ชนขอบบน/ล่าง
   if(ballY<=0){ 
     ballY=0; 
     ballDY = abs(ballDY); 
@@ -133,21 +135,21 @@ void updateBall(){
     beep(800,30); 
   }
 
-  // Paddle P1
+  // ชน Paddle P1
   if(ballX<=paddleW && ballY>=p1Y && ballY<=p1Y+paddleH){ 
     ballX = paddleW; 
     ballDX = abs(ballDX); 
     beep(1000,50); 
   }
 
-  // Paddle P2
+  // ชน Paddle P2
   if(ballX>=127-paddleW && ballY>=p2Y && ballY<=p2Y+paddleH){ 
     ballX = 127-paddleW; 
     ballDX = -abs(ballDX); 
     beep(1000,50); 
   }
 
-  // out line oles
+  // ออกนอกจอ
   if(ballX<0){ p2Score++; resetBall(); checkWin(); }
   if(ballX>127){ p1Score++; resetBall(); checkWin(); }
 }
@@ -156,16 +158,20 @@ void readJoystickP1(){ int y=analogRead(JOY1_Y); if(y<1500)p1Y-=2; else if(y>300
 void readJoystickP2(){ int y=analogRead(JOY2_Y); if(y<1500)p2Y-=2; else if(y>3000)p2Y+=2; }
 
 void playPvP(){ readJoystickP1(); readJoystickP2(); clampPaddles(); updateBall(); }
+
 void playPvAI(){
   readJoystickP1();
   static unsigned long lastMove=0;
   if(millis()-lastMove>60){
-    if(ballY<p2Y+paddleH/2)p2Y-=2;
-    else if(ballY>p2Y+paddleH/2)p2Y+=2;
+    if(random(0,100)<ai2Accuracy){   // ใช้ Accuracy ที่สุ่ม
+      if(ballY<p2Y+paddleH/2)p2Y-=2;
+      else if(ballY>p2Y+paddleH/2)p2Y+=2;
+    }
     lastMove=millis();
   }
   clampPaddles(); updateBall();
 }
+
 void playAIvsAI(){
   static unsigned long lastMove1=0,lastMove2=0;
   if(millis()-lastMove1>80){
@@ -214,6 +220,20 @@ void drawFrame(const char* l,const char* r){
   } while(u8g2.nextPage());
 }
 
+// ===== Randomize AI Accuracy =====
+void randomizeAIAccuracy(){
+  if(gameMode==1){          // Player vs AI
+    ai1Accuracy = 100;      // Player = joystick
+    ai2Accuracy = random(1,101);
+  } else if(gameMode==2){   // AI vs AI
+    ai1Accuracy = random(1,101);
+    ai2Accuracy = random(1,101);
+  } else {
+    ai1Accuracy = 0;
+    ai2Accuracy = 0;
+  }
+}
+
 // ===== Web Handlers =====
 void handleRoot(){ server.send_P(200,"text/html",INDEX_HTML); }
 void handleScore(){
@@ -229,6 +249,7 @@ void handleScore(){
 void handleReset(){
   p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
   resetBall();
+  randomizeAIAccuracy();
   server.send(200,"text/plain","OK");
 }
 void handleMode(){
@@ -237,10 +258,7 @@ void handleMode(){
     if(m>=0 && m<=2){
       gameMode=m; p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
       resetBall();
-      if(m==2){
-        ai1Accuracy = random(1,101);  // 1–100%
-        ai2Accuracy = random(1,101);  // 1–100%
-      }
+      randomizeAIAccuracy();
     }
   }
   server.send(200,"text/plain","Mode set");
@@ -273,6 +291,7 @@ void loop(){
   if(gameOver && (millis()-gameOverTime>3000)){
     p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
     resetBall();
+    randomizeAIAccuracy();
   }
 
   if(!gameOver && gameMode!=-1){
