@@ -95,31 +95,41 @@ void checkWin(){
     strcpy(winner,(gameMode==0?"P1":gameMode==1?"YOU":"AI1"));
     strcpy(lastWinner,winner);
     gameOverTime=millis();
-    beep(1500,300); // เสียงชนะ
+    beep(1800,300); // เสียงชนะ
   }
   if(p2Score>=maxScore){ 
     gameOver=true; 
     strcpy(winner,(gameMode==0?"P2":gameMode==1?"AI":"AI2"));
     strcpy(lastWinner,winner);
     gameOverTime=millis();
-    beep(1500,300); // เสียงชนะ
+    beep(1800,300); // เสียงชนะ
   }
 }
 void updateBall(){
   if(gameOver || gameMode==-1) return;
   ballX+=ballDX; ballY+=ballDY;
-  if(ballY<=0||ballY>=63) ballDY=-ballDY;
+
+  // ชนขอบบน/ล่าง
+  if(ballY<=0||ballY>=63){
+    ballDY=-ballDY;
+    beep(800,30); // bounce wall
+  }
+
+  // ชน Paddle
   if(ballX<=paddleW && ballY>=p1Y && ballY<=p1Y+paddleH){ 
     ballDX=-ballDX; 
-    beep(1000,50); // ตีลูก
+    beep(1000,50); 
   }
   if(ballX>=127-paddleW && ballY>=p2Y && ballY<=p2Y+paddleH){ 
     ballDX=-ballDX; 
-    beep(1000,50); // ตีลูก
+    beep(1000,50); 
   }
+
+  // ออกนอกจอ
   if(ballX<0){ p2Score++; resetBall(); checkWin(); }
   if(ballX>127){ p1Score++; resetBall(); checkWin(); }
 }
+
 void readJoystickP1(){ int y=analogRead(JOY1_Y); if(y<1500)p1Y-=2; else if(y>3000)p1Y+=2; }
 void readJoystickP2(){ int y=analogRead(JOY2_Y); if(y<1500)p2Y-=2; else if(y>3000)p2Y+=2; }
 
@@ -164,14 +174,23 @@ void drawFrame(const char* l,const char* r){
       char buf1[12], buf2[12];
       snprintf(buf1,sizeof(buf1),"%s:%d", l,p1Score);
       snprintf(buf2,sizeof(buf2),"%s:%d", r,p2Score);
+
+      // วาด Paddle + Ball
       u8g2.drawBox(0,p1Y,paddleW,paddleH);
       u8g2.drawBox(127-paddleW,p2Y,paddleW,paddleH);
       u8g2.drawBox(ballX,ballY,2,2);
+
+      // วาด Score
       u8g2.drawStr(4,10,buf1);
       u8g2.drawStr(92,10,buf2);
+
+      // ถ้าเกมจบ → แสดงผลผู้ชนะตรงกลาง
       if(gameOver){
-        u8g2.drawStr(36,30,winner);
-        u8g2.drawStr(36,45,"WINS!");
+        int w = u8g2.getStrWidth(winner);
+        u8g2.drawStr((128-w)/2, 30, winner);
+
+        w = u8g2.getStrWidth("WINS!");
+        u8g2.drawStr((128-w)/2, 45, "WINS!");
       }
     }
   } while(u8g2.nextPage());
@@ -215,6 +234,7 @@ void setup(){
 void loop(){
   server.handleClient();
 
+  // auto reset หลังชนะ 3 วิ
   if(gameOver && (millis()-gameOverTime>3000)){
     p1Score=0;p2Score=0;gameOver=false;winner[0]='\0';
     resetBall();
