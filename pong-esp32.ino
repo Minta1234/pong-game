@@ -13,6 +13,11 @@ U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 // ===== Buzzer =====
 #define BUZZER_PIN 25
 
+// ===== Buttons =====
+#define BTN1 13  // Select PvP
+#define BTN2 12   // Select PvAI
+#define BTN3 14   // Select AIvsAI
+
 // ===== Game State =====
 int p1Y=30, p2Y=30;
 int ballX=64, ballY=32;
@@ -26,7 +31,7 @@ char lastWinner[8]="";
 const int maxScore=5;
 unsigned long gameOverTime=0;
 
-// ===== AI Accuracy (สุ่ม 1–100%) =====
+// ===== AI Accuracy =====
 int ai1Accuracy=0;
 int ai2Accuracy=0;
 
@@ -123,7 +128,6 @@ void updateBall(){
   ballX+=ballDX; 
   ballY+=ballDY;
 
-  // ชนขอบบน/ล่าง
   if(ballY<=0){ 
     ballY=0; 
     ballDY = abs(ballDY); 
@@ -135,21 +139,18 @@ void updateBall(){
     beep(800,30); 
   }
 
-  // ชน Paddle P1
   if(ballX<=paddleW && ballY>=p1Y && ballY<=p1Y+paddleH){ 
     ballX = paddleW; 
     ballDX = abs(ballDX); 
     beep(1000,50); 
   }
 
-  // ชน Paddle P2
   if(ballX>=127-paddleW && ballY>=p2Y && ballY<=p2Y+paddleH){ 
     ballX = 127-paddleW; 
     ballDX = -abs(ballDX); 
     beep(1000,50); 
   }
 
-  // ออกนอกจอ
   if(ballX<0){ p2Score++; resetBall(); checkWin(); }
   if(ballX>127){ p1Score++; resetBall(); checkWin(); }
 }
@@ -163,7 +164,7 @@ void playPvAI(){
   readJoystickP1();
   static unsigned long lastMove=0;
   if(millis()-lastMove>60){
-    if(random(0,100)<ai2Accuracy){   // ใช้ Accuracy ที่สุ่ม
+    if(random(0,100)<ai2Accuracy){
       if(ballY<p2Y+paddleH/2)p2Y-=2;
       else if(ballY>p2Y+paddleH/2)p2Y+=2;
     }
@@ -223,7 +224,7 @@ void drawFrame(const char* l,const char* r){
 // ===== Randomize AI Accuracy =====
 void randomizeAIAccuracy(){
   if(gameMode==1){          // Player vs AI
-    ai1Accuracy = 100;      // Player = joystick
+    ai1Accuracy = 100;      // Player always perfect
     ai2Accuracy = random(1,101);
   } else if(gameMode==2){   // AI vs AI
     ai1Accuracy = random(1,101);
@@ -269,6 +270,11 @@ void handlePing(){ server.send(200,"text/plain","pong"); }
 void setup(){
   u8g2.begin();
   pinMode(BUZZER_PIN, OUTPUT);
+
+  pinMode(BTN1, INPUT_PULLUP);
+  pinMode(BTN2, INPUT_PULLUP);
+  pinMode(BTN3, INPUT_PULLUP);
+
   randomSeed((uint32_t)esp_timer_get_time() ^ micros());
 
   WiFi.mode(WIFI_AP);
@@ -285,13 +291,27 @@ void setup(){
 
   resetBall();
 }
+
 void loop(){
   server.handleClient();
 
+  // ===== Button Control =====
+  if(digitalRead(BTN1)==LOW){   // PvP
+    gameMode=0; p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
+    resetBall(); randomizeAIAccuracy(); delay(300);
+  }
+  if(digitalRead(BTN2)==LOW){   // PvAI
+    gameMode=1; p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
+    resetBall(); randomizeAIAccuracy(); delay(300);
+  }
+  if(digitalRead(BTN3)==LOW){   // AIvsAI
+    gameMode=2; p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
+    resetBall(); randomizeAIAccuracy(); delay(300);
+  }
+
   if(gameOver && (millis()-gameOverTime>3000)){
     p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
-    resetBall();
-    randomizeAIAccuracy();
+    resetBall(); randomizeAIAccuracy();
   }
 
   if(!gameOver && gameMode!=-1){
@@ -305,5 +325,5 @@ void loop(){
   else if(gameMode==2) drawFrame("AI1","AI2");
   else                 drawFrame("","");
 
-  delay(20); // ~50 FPS
+  delay(20);
 }
