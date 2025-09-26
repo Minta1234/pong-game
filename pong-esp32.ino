@@ -3,12 +3,15 @@
 #include <U8g2lib.h>
 #include <Wire.h>
 
-// ===== OLED SH1106 =====
+// ===== OLED SH1106 (Page Buffer) =====
 U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
 // ===== Joystick =====
-#define JOY1_Y 34   // Player 1
-#define JOY2_Y 35   // Player 2
+#define JOY1_Y 34
+#define JOY2_Y 35
+
+// ===== Buzzer =====
+#define BUZZER_PIN 25
 
 // ===== Game State =====
 int p1Y=30, p2Y=30;
@@ -16,10 +19,10 @@ int ballX=64, ballY=32;
 int ballDX=1, ballDY=1;
 const int paddleH=16, paddleW=2;
 int p1Score=0, p2Score=0;
-int gameMode=-1;     // -1=Not Selected, 0=PvP, 1=PvAI, 2=AIvsAI
+int gameMode=-1;      
 bool gameOver=false;
-String winner="";
-String lastWinner="";
+char winner[8]="";
+char lastWinner[8]="";
 const int maxScore=5;
 unsigned long gameOverTime=0;
 
@@ -28,8 +31,8 @@ WebServer server(80);
 const char *SSID="ESP32-PONG";
 const char *PASS="12345678";
 
-// ===== HTML (หน้าเว็บ) =====
-static const char INDEX_HTML[] PROGMEM = R"HTML(
+// ===== HTML (เก็บใน Flash) =====
+static const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html><html><head><meta charset="utf-8"/>
 <title>ESP32 Pong</title>
 <style>
@@ -63,10 +66,17 @@ async function poll(){
     win.textContent = d.over ? (d.winner+" WINS!") : "";
   }catch(e){}
 }
-setInterval(poll,400); poll();
+setInterval(poll,500); poll();
 </script>
 </body></html>
-)HTML";
+)rawliteral";
+
+// ===== Buzzer Helper =====
+void beep(int freq, int duration){
+  tone(BUZZER_PIN, freq, duration);
+  delay(duration);
+  noTone(BUZZER_PIN);
+}
 
 // ===== Game Logic =====
 void resetBall(){ 
@@ -82,23 +92,31 @@ inline void clampPaddles(){
 void checkWin(){
   if(p1Score>=maxScore){ 
     gameOver=true; 
-    winner=(gameMode==0?"P1":gameMode==1?"YOU":"AI1"); 
-    lastWinner=winner; 
+    strcpy(winner,(gameMode==0?"P1":gameMode==1?"YOU":"AI1"));
+    strcpy(lastWinner,winner);
     gameOverTime=millis();
+    beep(1500,300); // เสียงชนะ
   }
   if(p2Score>=maxScore){ 
     gameOver=true; 
-    winner=(gameMode==0?"P2":gameMode==1?"AI":"AI2"); 
-    lastWinner=winner; 
+    strcpy(winner,(gameMode==0?"P2":gameMode==1?"AI":"AI2"));
+    strcpy(lastWinner,winner);
     gameOverTime=millis();
+    beep(1500,300); // เสียงชนะ
   }
 }
 void updateBall(){
   if(gameOver || gameMode==-1) return;
   ballX+=ballDX; ballY+=ballDY;
   if(ballY<=0||ballY>=63) ballDY=-ballDY;
-  if(ballX<=paddleW && ballY>=p1Y && ballY<=p1Y+paddleH) ballDX=-ballDX;
-  if(ballX>=127-paddleW && ballY>=p2Y && ballY<=p2Y+paddleH) ballDX=-ballDX;
+  if(ballX<=paddleW && ballY>=p1Y && ballY<=p1Y+paddleH){ 
+    ballDX=-ballDX; 
+    beep(1000,50); // ตีลูก
+  }
+  if(ballX>=127-paddleW && ballY>=p2Y && ballY<=p2Y+paddleH){ 
+    ballDX=-ballDX; 
+    beep(1000,50); // ตีลูก
+  }
   if(ballX<0){ p2Score++; resetBall(); checkWin(); }
   if(ballX>127){ p1Score++; resetBall(); checkWin(); }
 }
@@ -109,7 +127,7 @@ void playPvP(){ readJoystickP1(); readJoystickP2(); clampPaddles(); updateBall()
 void playPvAI(){ 
   readJoystickP1(); 
   static unsigned long lastMove=0;
-  if(millis()-lastMove>60){ // AI reaction ~60ms
+  if(millis()-lastMove>60){ 
     if(ballY<p2Y+paddleH/2)p2Y-=2; 
     else if(ballY>p2Y+paddleH/2)p2Y+=2; 
     lastMove=millis();
@@ -118,15 +136,15 @@ void playPvAI(){
 }
 void playAIvsAI(){
   static unsigned long lastMove1=0,lastMove2=0;
-  if(millis()-lastMove1>80){ // AI1 reaction
-    if(random(0,100)>20){ // 80% แม่น
+  if(millis()-lastMove1>80){ 
+    if(random(0,100)>20){ 
       if(ballY<p1Y+paddleH/2)p1Y-=2;
       else if(ballY>p1Y+paddleH/2)p1Y+=2;
     }
     lastMove1=millis();
   }
-  if(millis()-lastMove2>100){ // AI2 reaction
-    if(random(0,100)>50){ // 50% แม่น
+  if(millis()-lastMove2>100){ 
+    if(random(0,100)>50){ 
       if(ballY<p2Y+paddleH/2)p2Y-=2;
       else if(ballY>p2Y+paddleH/2)p2Y+=2;
     }
@@ -141,7 +159,7 @@ void drawFrame(const char* l,const char* r){
     u8g2.setFont(u8g2_font_6x12_tr);
     if(gameMode==-1){
       u8g2.drawStr(20,30,"PING PONG GAME");
-      if(lastWinner!="") u8g2.drawStr(15,50,("Last: "+lastWinner).c_str());
+      if(strlen(lastWinner)>0) u8g2.drawStr(15,50,lastWinner);
     }else{
       char buf1[12], buf2[12];
       snprintf(buf1,sizeof(buf1),"%s:%d", l,p1Score);
@@ -152,7 +170,7 @@ void drawFrame(const char* l,const char* r){
       u8g2.drawStr(4,10,buf1);
       u8g2.drawStr(92,10,buf2);
       if(gameOver){
-        u8g2.drawStr(36,30,winner.c_str());
+        u8g2.drawStr(36,30,winner);
         u8g2.drawStr(36,45,"WINS!");
       }
     }
@@ -162,17 +180,17 @@ void drawFrame(const char* l,const char* r){
 // ===== Web Handlers =====
 void handleRoot(){ server.send_P(200,"text/html",INDEX_HTML); }
 void handleScore(){
-  char buf[160];
+  char buf[96];
   snprintf(buf,sizeof(buf),
     "{\"P1\":%d,\"P2\":%d,\"mode\":%d,\"over\":%s,\"winner\":\"%s\"}",
-    p1Score,p2Score,gameMode, gameOver?"true":"false", winner.c_str());
+    p1Score,p2Score,gameMode, gameOver?"true":"false", winner);
   server.send(200,"application/json",buf);
 }
-void handleReset(){ p1Score=0;p2Score=0;gameOver=false;winner="";resetBall(); server.send(200,"text/plain","OK"); }
+void handleReset(){ p1Score=0;p2Score=0;gameOver=false;winner[0]='\0';resetBall(); server.send(200,"text/plain","OK"); }
 void handleMode(){
   if(server.hasArg("m")){
     int m=server.arg("m").toInt();
-    if(m>=0&&m<=2){ gameMode=m; p1Score=0;p2Score=0;gameOver=false;winner=""; resetBall(); }
+    if(m>=0&&m<=2){ gameMode=m; p1Score=0;p2Score=0;gameOver=false;winner[0]='\0'; resetBall(); }
   }
   server.send(200,"text/plain","Mode set");
 }
@@ -181,6 +199,7 @@ void handlePing(){ server.send(200,"text/plain","pong"); }
 // ===== Setup/Loop =====
 void setup(){
   u8g2.begin();
+  pinMode(BUZZER_PIN,OUTPUT);
   WiFi.mode(WIFI_AP);
   IPAddress ip(192,168,4,1),gw(192,168,4,1),mask(255,255,255,0);
   WiFi.softAPConfig(ip,gw,mask);
@@ -196,9 +215,8 @@ void setup(){
 void loop(){
   server.handleClient();
 
-  // Auto reset หลังจบเกม 3 วิ
   if(gameOver && (millis()-gameOverTime>3000)){
-    p1Score=0;p2Score=0;gameOver=false;winner="";
+    p1Score=0;p2Score=0;gameOver=false;winner[0]='\0';
     resetBall();
   }
 
@@ -213,5 +231,5 @@ void loop(){
   else if(gameMode==2) drawFrame("AI1","AI2");
   else drawFrame("","");
 
-  delay(16); // ~60 FPS
+  delay(20); 
 }
