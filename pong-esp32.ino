@@ -26,7 +26,7 @@ char lastWinner[8]="";
 const int maxScore=5;
 unsigned long gameOverTime=0;
 
-// ===== AI Accuracy (สุ่มเป็นตัวเลขจริง) =====
+// ===== AI Accuracy  =====
 int ai1Accuracy=50;
 int ai2Accuracy=50;
 
@@ -218,7 +218,7 @@ void handleMode(){
       gameMode=m; p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
       resetBall();
       if(m==2){
-        // สุ่ม accuracy จริง: 30%–70%
+        // สุ่ม accuracy 
         ai1Accuracy = random(30,71);
         ai2Accuracy = random(30,71);
       }
