@@ -28,7 +28,7 @@ int gameMode=-1;
 bool gameOver=false;
 char winner[8]="";
 char lastWinner[8]="";
-const int maxScore=5;
+const int maxScore=10;
 unsigned long gameOverTime=0;
 
 // ===== AI Accuracy =====
@@ -42,16 +42,84 @@ const char *PASS="12345678";
 
 // ===== HTML (Flash) =====
 static const char INDEX_HTML[] PROGMEM = R"HTML(
-<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
 <title>ESP32 Pong</title>
 <style>
-body{font-family:sans-serif;background:#0b0f14;color:#eee;text-align:center;padding:20px}
-button{margin:6px;padding:10px 16px;font-size:16px;border:0;border-radius:6px;cursor:pointer}
-.score{font-size:32px;font-weight:bold;margin:12px 0}
-.mode{color:#94a3b8;margin-bottom:4px}
-.aiinfo{color:#38bdf8;font-size:14px;margin-bottom:12px;height:18px}
-.win{font-size:20px;color:#0ff;margin-top:10px}
-</style></head><body>
+/* ===== Base ===== */
+body {
+  font-family: "Courier New", monospace;
+  background: linear-gradient(135deg, #0b0f14 0%, #0b0f14 100%);
+  color: #eee;
+  text-align: center;
+  padding: 20px;
+  margin: 0;
+}
+
+/* ===== Headings ===== */
+h1 {
+  font-size: 36px;
+  color: #38bdf8;
+  text-shadow: 0 0 8px #0ff, 0 0 16px #0ff;
+  margin-bottom: 20px;
+}
+
+/* ===== Score ===== */
+.score {
+  font-size: 40px;
+  font-weight: bold;
+  margin: 12px 0;
+  color: #0ff;
+  text-shadow: 0 0 6px #0ff;
+}
+
+/* ===== Mode / AI Info ===== */
+.mode {
+  color: #94a3b8;
+  margin-bottom: 6px;
+  font-size: 16px;
+}
+.aiinfo {
+  color: #38bdf8;
+  font-size: 15px;
+  margin-bottom: 14px;
+  height: 18px;
+  letter-spacing: 1px;
+}
+.win {
+  font-size: 22px;
+  color: #0ff;
+  margin-top: 12px;
+  text-shadow: 0 0 10px #0ff;
+}
+
+/* ===== Buttons ===== */
+button {
+  margin: 8px;
+  padding: 12px 20px;
+  font-size: 16px;
+  font-weight: bold;
+  border: 2px solid #38bdf8;
+  border-radius: 8px;
+  background: #0b1724;
+  color: #38bdf8;
+  cursor: pointer;
+  transition: all 0.25s ease-in-out;
+  box-shadow: 0 0 6px rgba(56,189,248,0.5);
+}
+button:hover {
+  background: #38bdf8;
+  color: #0b1724;
+  box-shadow: 0 0 12px #38bdf8, 0 0 24px #38bdf8;
+}
+button:active {
+  transform: scale(0.95);
+}
+</style>
+</head>
+<body>
 <h1>ESP32 Pong</h1>
 <div class="score" id="sc">0 - 0</div>
 <div class="mode" id="md">Mode: Not Selected</div>
@@ -64,8 +132,8 @@ button{margin:6px;padding:10px 16px;font-size:16px;border:0;border-radius:6px;cu
 </div>
 <div>
   <button onclick="fetch('/reset',{method:'POST'}).then(()=>setTimeout(poll,150))">Reset</button>
-  <button onclick="fetch('/ping')">Ping</button>
-  <button onclick="location.reload()">Refresh</button>
+  <p><button onclick="fetch('/ping')">Ping</button></p>
+  <p><button onclick="location.reload()">Refresh</button></p>
 </div>
 <script>
 async function poll(){
@@ -82,7 +150,8 @@ async function poll(){
 }
 setInterval(poll,500); poll();
 </script>
-</body></html>
+</body>
+</html>
 )HTML";
 
 // ===== Buzzer Helper =====
