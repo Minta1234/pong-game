@@ -11,22 +11,22 @@ U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 #define JOY2_Y 35
 
 // ===== Buzzer =====
-#define BUZZER_PIN 25   // ใช้ GPIO25 หรือ 26/27/32/33 ก็ได้
+#define BUZZER_PIN 25
 
 // ===== Game State =====
 int p1Y=30, p2Y=30;
 int ballX=64, ballY=32;
-int ballDX=1, ballDY=1;
+int ballDX=1, ballDY=1;   
 const int paddleH=16, paddleW=2;
 int p1Score=0, p2Score=0;
-int gameMode=-1;      // -1=Not Selected, 0=PvP, 1=PvAI, 2=AIvsAI
+int gameMode=-1;      
 bool gameOver=false;
 char winner[8]="";
 char lastWinner[8]="";
 const int maxScore=5;
 unsigned long gameOverTime=0;
 
-// ===== AI Accuracy  =====
+// ===== AI Accuracy ( 1–100%) =====
 int ai1Accuracy=50;
 int ai2Accuracy=50;
 
@@ -88,14 +88,16 @@ void beep(int freq, int duration){
 // ===== Game Logic =====
 void resetBall(){
   ballX=64; ballY=32;
-  ballDX=(random(0,2)?1:-1);
-  ballDY=random(-1,2);
+  ballDX = (random(0,2)?1:-1);
+  ballDY = (random(0,2)?1:-1);
 }
+
 inline void clampPaddles(){
   if(p1Y<0) p1Y=0; if(p2Y<0) p2Y=0;
   if(p1Y>64-paddleH) p1Y=64-paddleH;
   if(p2Y>64-paddleH) p2Y=64-paddleH;
 }
+
 void checkWin(){
   if(p1Score>=maxScore){
     gameOver=true;
@@ -112,26 +114,44 @@ void checkWin(){
     beep(1800,300);
   }
 }
+
 void updateBall(){
   if(gameOver || gameMode==-1) return;
 
-  ballX+=ballDX; ballY+=ballDY;
+  ballX+=ballDX; 
+  ballY+=ballDY;
 
-  if(ballY<=0 || ballY>=63){
-    ballDY=-ballDY;
-    beep(800,30);
+  
+  if(ballY<=0){ 
+    ballY=0; 
+    ballDY = abs(ballDY); 
+    beep(800,30); 
   }
-  if(ballX<=paddleW && ballY>=p1Y && ballY<=p1Y+paddleH){
-    ballDX=-ballDX;
-    beep(1000,50);
+  if(ballY>=63){ 
+    ballY=63; 
+    ballDY = -abs(ballDY); 
+    beep(800,30); 
   }
-  if(ballX>=127-paddleW && ballY>=p2Y && ballY<=p2Y+paddleH){
-    ballDX=-ballDX;
-    beep(1000,50);
+
+  // Paddle P1
+  if(ballX<=paddleW && ballY>=p1Y && ballY<=p1Y+paddleH){ 
+    ballX = paddleW; 
+    ballDX = abs(ballDX); 
+    beep(1000,50); 
   }
+
+  // Paddle P2
+  if(ballX>=127-paddleW && ballY>=p2Y && ballY<=p2Y+paddleH){ 
+    ballX = 127-paddleW; 
+    ballDX = -abs(ballDX); 
+    beep(1000,50); 
+  }
+
+  // out line oles
   if(ballX<0){ p2Score++; resetBall(); checkWin(); }
   if(ballX>127){ p1Score++; resetBall(); checkWin(); }
 }
+
 void readJoystickP1(){ int y=analogRead(JOY1_Y); if(y<1500)p1Y-=2; else if(y>3000)p1Y+=2; }
 void readJoystickP2(){ int y=analogRead(JOY2_Y); if(y<1500)p2Y-=2; else if(y>3000)p2Y+=2; }
 
@@ -218,9 +238,8 @@ void handleMode(){
       gameMode=m; p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
       resetBall();
       if(m==2){
-        // สุ่ม accuracy 
-        ai1Accuracy = random(30,71);
-        ai2Accuracy = random(30,71);
+        ai1Accuracy = random(1,101);  // 1–100%
+        ai2Accuracy = random(1,101);  // 1–100%
       }
     }
   }
