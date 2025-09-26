@@ -36,6 +36,10 @@ GND → GND
 SCL → GPIO 22
 SDA → GPIO 21
 
+Buzzer
+GND → GND
+VCC → GPIO 25
+
 Joystick P1 
 VRy → GPIO 34
 VCC → 3.3V
