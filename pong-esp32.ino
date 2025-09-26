@@ -15,8 +15,8 @@ U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
 // ===== Buttons =====
 #define BTN1 13  // Select PvP
-#define BTN2 12   // Select PvAI
-#define BTN3 14   // Select AIvsAI
+#define BTN2 12  // Select PvAI
+#define BTN3 14  // Select AIvsAI
 
 // ===== Game State =====
 int p1Y=30, p2Y=30;
@@ -24,7 +24,7 @@ int ballX=64, ballY=32;
 int ballDX=1, ballDY=1;
 const int paddleH=16, paddleW=2;
 int p1Score=0, p2Score=0;
-int gameMode=-1;      
+int gameMode=-1;
 bool gameOver=false;
 char winner[8]="";
 char lastWinner[8]="";
@@ -34,6 +34,9 @@ unsigned long gameOverTime=0;
 // ===== AI Accuracy =====
 int ai1Accuracy=0;
 int ai2Accuracy=0;
+
+// ===== OLED Brightness =====
+int oledBrightness = 128;  // ค่าเริ่มต้น (0–255)
 
 // ===== WiFi AP/Web =====
 WebServer server(80);
@@ -50,27 +53,27 @@ static const char INDEX_HTML[] PROGMEM = R"HTML(
 <style>
 /* ===== Base ===== */
 body {
-  font-family: "Courier New", monospace;
-  background: linear-gradient(135deg, #0b0f14 0%, #0b0f14 100%);
+  font-family: monospace;
+  background: #0b0f14;
   color: #eee;
   text-align: center;
   padding: 20px;
   margin: 0;
 }
 
-/* ===== Headings ===== */
+/* ===== Title ===== */
 h1 {
-  font-size: 36px;
+  font-size: 28px;
   color: #38bdf8;
-  text-shadow: 0 0 8px #0ff, 0 0 16px #0ff;
-  margin-bottom: 20px;
+  text-shadow: 0 0 6px #0ff;
+  margin-bottom: 16px;
 }
 
 /* ===== Score ===== */
 .score {
-  font-size: 40px;
+  font-size: 28px;
   font-weight: bold;
-  margin: 12px 0;
+  margin: 10px 0;
   color: #0ff;
   text-shadow: 0 0 6px #0ff;
 }
@@ -78,63 +81,87 @@ h1 {
 /* ===== Mode / AI Info ===== */
 .mode {
   color: #94a3b8;
-  margin-bottom: 6px;
-  font-size: 16px;
+  margin-bottom: 4px;
+  font-size: 14px;
 }
 .aiinfo {
   color: #38bdf8;
-  font-size: 15px;
-  margin-bottom: 14px;
-  height: 18px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  height: 16px;
   letter-spacing: 1px;
 }
 .win {
-  font-size: 22px;
+  font-size: 18px;
   color: #0ff;
-  margin-top: 12px;
-  text-shadow: 0 0 10px #0ff;
+  margin-top: 10px;
+  text-shadow: 0 0 8px #0ff;
 }
 
 /* ===== Buttons ===== */
 button {
-  margin: 8px;
-  padding: 12px 20px;
-  font-size: 16px;
+  margin: 6px;
+  padding: 10px 16px;
+  font-size: 14px;
   font-weight: bold;
   border: 2px solid #38bdf8;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #0b1724;
   color: #38bdf8;
   cursor: pointer;
-  transition: all 0.25s ease-in-out;
+  transition: all 0.2s;
   box-shadow: 0 0 6px rgba(56,189,248,0.5);
 }
 button:hover {
   background: #38bdf8;
   color: #0b1724;
-  box-shadow: 0 0 12px #38bdf8, 0 0 24px #38bdf8;
+  box-shadow: 0 0 12px #38bdf8;
 }
 button:active {
   transform: scale(0.95);
+}
+
+/* ===== Brightness Slider ===== */
+label {
+  font-size: 14px;
+  color: #94a3b8;
+}
+input[type=range] {
+  width: 200px;
+  margin-top: 10px;
 }
 </style>
 </head>
 <body>
 <h1>ESP32 Pong</h1>
+
+<!-- Score + Status -->
 <div class="score" id="sc">0 - 0</div>
 <div class="mode" id="md">Mode: Not Selected</div>
 <div class="aiinfo" id="aiinfo"></div>
 <div class="win" id="win"></div>
+
+<!-- Mode Buttons -->
 <div>
   <p><button onclick="fetch('/mode?m=0')">Player vs Player</button></p>
   <p><button onclick="fetch('/mode?m=1')">Player vs AI</button></p>
   <p><button onclick="fetch('/mode?m=2').then(()=>setTimeout(poll,150))">AI vs AI</button></p>
 </div>
+
+<!-- Control Buttons -->
 <div>
-  <button onclick="fetch('/reset',{method:'POST'}).then(()=>setTimeout(poll,150))">Reset</button>
+  <p><button onclick="fetch('/reset',{method:'POST'}).then(()=>setTimeout(poll,150))">Reset</button></p>
   <p><button onclick="fetch('/ping')">Ping</button></p>
   <p><button onclick="location.reload()">Refresh</button></p>
 </div>
+
+<!-- Brightness Control -->
+<div>
+  <label>Brightness:</label><br>
+  <input type="range" id="br" min="0" max="255" value="128"
+         oninput="fetch('/brightness?val='+this.value)">
+</div>
+
 <script>
 async function poll(){
   try{
@@ -261,24 +288,26 @@ void playAIvsAI(){
   clampPaddles(); updateBall();
 }
 
+// ===== OLED Drawing (Font 8px) =====
 void drawFrame(const char* l,const char* r){
   u8g2.firstPage();
   do {
-    u8g2.setFont(u8g2_font_6x12_tr);
+    u8g2.setFont(u8g2_font_5x8_tr);
+
     if(gameMode==-1){
-      u8g2.drawStr(20,30,"PING PONG GAME");
-      if(strlen(lastWinner)>0) u8g2.drawStr(15,50,lastWinner);
+      u8g2.drawStr(25,30,"PING PONG GAME");
+      if(strlen(lastWinner)>0) u8g2.drawStr(30,50,lastWinner);
     }else{
       char buf1[12], buf2[12];
       snprintf(buf1,sizeof(buf1),"%s:%d", l,p1Score);
       snprintf(buf2,sizeof(buf2),"%s:%d", r,p2Score);
 
+      u8g2.drawStr(0,8,buf1);
+      u8g2.drawStr(95,8,buf2);
+
       u8g2.drawBox(0,p1Y,paddleW,paddleH);
       u8g2.drawBox(127-paddleW,p2Y,paddleW,paddleH);
       u8g2.drawBox(ballX,ballY,2,2);
-
-      u8g2.drawStr(4,10,buf1);
-      u8g2.drawStr(92,10,buf2);
 
       if(gameOver){
         int w = u8g2.getStrWidth(winner);
@@ -293,7 +322,7 @@ void drawFrame(const char* l,const char* r){
 // ===== Randomize AI Accuracy =====
 void randomizeAIAccuracy(){
   if(gameMode==1){          // Player vs AI
-    ai1Accuracy = 100;      // Player always perfect
+    ai1Accuracy = 100;
     ai2Accuracy = random(1,101);
   } else if(gameMode==2){   // AI vs AI
     ai1Accuracy = random(1,101);
@@ -335,9 +364,21 @@ void handleMode(){
 }
 void handlePing(){ server.send(200,"text/plain","pong"); }
 
+void handleBrightness(){
+  if(server.hasArg("val")){
+    int val = server.arg("val").toInt();
+    if(val < 0) val = 0;
+    if(val > 255) val = 255;
+    oledBrightness = val;
+    u8g2.setContrast(oledBrightness);
+  }
+  server.send(200,"text/plain","OK");
+}
+
 // ===== Setup/Loop =====
 void setup(){
   u8g2.begin();
+  u8g2.setContrast(oledBrightness);
   pinMode(BUZZER_PIN, OUTPUT);
 
   pinMode(BTN1, INPUT_PULLUP);
@@ -356,6 +397,7 @@ void setup(){
   server.on("/reset",HTTP_POST,handleReset);
   server.on("/mode",handleMode);
   server.on("/ping",handlePing);
+  server.on("/brightness",handleBrightness);
   server.begin();
 
   resetBall();
@@ -365,15 +407,15 @@ void loop(){
   server.handleClient();
 
   // ===== Button Control =====
-  if(digitalRead(BTN1)==LOW){   // PvP
+  if(digitalRead(BTN1)==LOW){
     gameMode=0; p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
     resetBall(); randomizeAIAccuracy(); delay(300);
   }
-  if(digitalRead(BTN2)==LOW){   // PvAI
+  if(digitalRead(BTN2)==LOW){
     gameMode=1; p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
     resetBall(); randomizeAIAccuracy(); delay(300);
   }
-  if(digitalRead(BTN3)==LOW){   // AIvsAI
+  if(digitalRead(BTN3)==LOW){
     gameMode=2; p1Score=0; p2Score=0; gameOver=false; winner[0]='\0';
     resetBall(); randomizeAIAccuracy(); delay(300);
   }
