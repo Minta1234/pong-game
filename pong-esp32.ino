@@ -36,7 +36,7 @@ int ai1Accuracy=0;
 int ai2Accuracy=0;
 
 // ===== OLED Brightness =====
-int oledBrightness = 128;  // ค่าเริ่มต้น (0–255)
+int oledBrightness = 128;  
 
 // ===== WiFi AP/Web =====
 WebServer server(80);
@@ -302,8 +302,8 @@ void drawFrame(const char* l,const char* r){
       snprintf(buf1,sizeof(buf1),"%s:%d", l,p1Score);
       snprintf(buf2,sizeof(buf2),"%s:%d", r,p2Score);
 
-      u8g2.drawStr(0,8,buf1);
-      u8g2.drawStr(95,8,buf2);
+     u8g2.drawStr(5, 9, buf1);   
+     u8g2.drawStr(95, 9, buf2);   
 
       u8g2.drawBox(0,p1Y,paddleW,paddleH);
       u8g2.drawBox(127-paddleW,p2Y,paddleW,paddleH);
